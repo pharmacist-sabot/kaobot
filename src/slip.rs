@@ -286,14 +286,14 @@ pub async fn handle_slip_image(bot: Bot, msg: Message, config: BotConfig) -> Res
     };
 
     // แจ้ง user ว่ากำลังประมวลผล
-    let processing_msg = bot.send_message(chat_id, "🔍 กำลังอ่านสลิป...").await?;
+    let processing_msg = bot.send_message(chat_id, "กำลังอ่านสลิป...").await?;
 
     // ดาวน์โหลดรูปจาก Telegram
     let image_b64 = match download_photo_base64(&bot, &best_photo.file.id).await {
         Ok(b64) => b64,
         Err(e) => {
             error!("Download photo error: {}", e);
-            bot.edit_message_text(chat_id, processing_msg.id, "❌ ดาวน์โหลดรูปไม่ได้")
+            bot.edit_message_text(chat_id, processing_msg.id, "❌ ดาวน์โหลดรูปไม่ได้ กรุณาลองใหม่")
                 .await?;
             return Ok(());
         }
@@ -317,9 +317,9 @@ pub async fn handle_slip_image(bot: Bot, msg: Message, config: BotConfig) -> Res
                 {
                     Ok(settle_reply) => {
                         let reply = format!(
-                            "🎉 *อ่านสลิปสำเร็จ!*\n\
-                             💸 ยอดโอน: *{:.0} บาท*\n\
-                             📝 {}\n\
+                            "✅ *อ่านสลิปสำเร็จ*\n\
+                             ยอดโอน: *{:.0} บาท*\n\
+                             {}\n\
                              {}",
                             amount, slip_info.raw_text, settle_reply
                         );
@@ -348,9 +348,9 @@ pub async fn handle_slip_image(bot: Bot, msg: Message, config: BotConfig) -> Res
                 let net_due = (raw_pending - credit).max(0.0);
 
                 let reply = format!(
-                    "📎 ได้รับสลิปแล้ว แต่อ่านยอดไม่ได้\n\
+                    "ได้รับสลิปแล้ว แต่อ่านยอดไม่ได้\n\
                      _{}_\n\n\
-                     💰 ยอดค้าง: *{:.0} บาท*{}\n\
+                     ยอดค้าง: *{:.0} บาท*{}\n\
                      กรุณาพิมพ์ `/paid <จำนวน>` เพื่อบันทึกเอง",
                     slip_info.raw_text,
                     net_due,
@@ -381,7 +381,7 @@ pub async fn handle_slip_image(bot: Bot, msg: Message, config: BotConfig) -> Res
                 processing_msg.id,
                 format!(
                     "❌ อ่านสลิปไม่สำเร็จ\n\
-                     💰 ยอดค้าง: *{:.0} บาท*{}\n\
+                     ยอดค้าง: *{:.0} บาท*{}\n\
                      กรุณาพิมพ์ `/paid <จำนวน>` แทน",
                     net_due,
                     if credit > 0.01 {

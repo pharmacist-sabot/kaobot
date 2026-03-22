@@ -28,7 +28,7 @@ pub enum Command {
 }
 
 pub async fn handle_help(bot: Bot, msg: Message) -> Result<()> {
-    let text = "🤖 *KaoBot — ผู้ช่วยบันทึกค่าใช้จ่าย*\n\n\
+    let text = "*KaoBot — ผู้ช่วยบันทึกค่าใช้จ่าย*\n\n\
         *วิธีบันทึกรายจ่าย:*\n\
         พิมพ์ชื่อรายการ + เว้นวรรค + จำนวนเงิน\n\
         ตัวอย่าง: `ข้าว 60` หรือ `กาแฟ 65.50`\n\n\
@@ -40,7 +40,7 @@ pub async fn handle_help(bot: Bot, msg: Message) -> Result<()> {
         /cancel 42 — ยกเลิกรายการ id 42\n\
         /clear — เคลียร์ทุกรายการ\n\n\
         *ส่งสลิป:*\n\
-        ส่งรูปสลิปมาใน chat นี้ — bot จะอ่านยอดและเคลียร์ให้อัตโนมัติ 🎉";
+        ส่งรูปสลิปมาใน chat นี้ — bot จะอ่านยอดและเคลียร์ให้อัตโนมัติ";
 
     bot.send_message(msg.chat.id, text)
         .parse_mode(teloxide::types::ParseMode::Markdown)
@@ -59,11 +59,11 @@ pub async fn handle_summary(bot: Bot, msg: Message, config: BotConfig) -> Result
         Ok(expenses) if expenses.is_empty() => {
             let text = if credit > 0.01 {
                 format!(
-                    "✨ ไม่มียอดค้างชำระ!\n🏦 มี credit คงเหลือ *{:.0} บาท* — จะหักอัตโนมัติเมื่อมีรายการใหม่",
+                    "ไม่มียอดค้างชำระ\n💰 credit คงเหลือ *{:.0} บาท* — จะหักอัตโนมัติเมื่อมีรายการใหม่",
                     credit
                 )
             } else {
-                "✨ ไม่มียอดค้างชำระ! เคลียร์หมดแล้ว".to_string()
+                "ไม่มียอดค้างชำระ เคลียร์หมดแล้ว".to_string()
             };
             bot.send_message(chat_id, text)
                 .parse_mode(teloxide::types::ParseMode::Markdown)
@@ -71,7 +71,7 @@ pub async fn handle_summary(bot: Bot, msg: Message, config: BotConfig) -> Result
         }
         Ok(expenses) => {
             let total: f64 = expenses.iter().map(|e| e.amount).sum();
-            let mut lines = vec!["📋 *รายการค้างชำระ:*\n".to_string()];
+            let mut lines = vec!["*รายการค้างชำระ:*\n".to_string()];
 
             for (i, e) in expenses.iter().enumerate() {
                 let date = e
@@ -88,12 +88,11 @@ pub async fn handle_summary(bot: Bot, msg: Message, config: BotConfig) -> Result
                 }
             }
 
-            // แสดงยอดสุทธิ หลังหัก credit
             let net_due = (total - credit).max(0.0);
-            lines.push(format!("\n💰 *รวมทั้งหมด: {:.0} บาท*", total));
+            lines.push(format!("\n*รวมทั้งหมด: {:.0} บาท*", total));
             if credit > 0.01 {
-                lines.push(format!("🏦 credit คงเหลือ: *{:.0} บาท*", credit));
-                lines.push(format!("➡️ ยอดที่ต้องโอน: *{:.0} บาท*", net_due));
+                lines.push(format!("credit คงเหลือ: *{:.0} บาท*", credit));
+                lines.push(format!("ยอดที่ต้องโอน: *{:.0} บาท*", net_due));
             }
             lines.push("\nโอนแล้วส่งสลิป หรือพิมพ์ `/paid <จำนวน>`".to_string());
 
@@ -116,11 +115,11 @@ pub async fn handle_today(bot: Bot, msg: Message, config: BotConfig) -> Result<(
 
     match supabase::get_today_expenses(&config, chat_id.0).await {
         Ok(expenses) if expenses.is_empty() => {
-            bot.send_message(chat_id, "📭 วันนี้ยังไม่มีรายการ").await?;
+            bot.send_message(chat_id, "วันนี้ยังไม่มีรายการ").await?;
         }
         Ok(expenses) => {
             let total: f64 = expenses.iter().map(|e| e.amount).sum();
-            let mut lines = vec!["📅 *รายการวันนี้:*\n".to_string()];
+            let mut lines = vec!["*รายการวันนี้:*\n".to_string()];
 
             for e in &expenses {
                 let time = e
@@ -130,7 +129,7 @@ pub async fn handle_today(bot: Bot, msg: Message, config: BotConfig) -> Result<(
                 lines.push(format!("• {} — *{:.0}฿* _{}_", e.item, e.amount, time));
             }
 
-            lines.push(format!("\n🧾 รวมวันนี้: *{:.0} บาท*", total));
+            lines.push(format!("\nรวมวันนี้: *{:.0} บาท*", total));
 
             bot.send_message(chat_id, lines.join("\n"))
                 .parse_mode(teloxide::types::ParseMode::Markdown)
@@ -154,11 +153,11 @@ pub async fn handle_history(bot: Bot, msg: Message, config: BotConfig) -> Result
             let recent: Vec<_> = expenses.into_iter().take(10).collect();
 
             if recent.is_empty() {
-                bot.send_message(chat_id, "📭 ไม่มีรายการค้างชำระ").await?;
+                bot.send_message(chat_id, "ไม่มีรายการค้างชำระ").await?;
                 return Ok(());
             }
 
-            let mut lines = vec!["🕐 *10 รายการล่าสุด:*\n".to_string()];
+            let mut lines = vec!["*10 รายการล่าสุด:*\n".to_string()];
             for e in &recent {
                 let date = e
                     .created_at
@@ -235,43 +234,36 @@ pub async fn settle_payment(
         .await
         .unwrap_or(0.0);
 
-    // บันทึก payment record
     supabase::insert_payment(config, chat_id, message_id, paid_amount, method, note).await?;
 
-    // เคลียร์รายการค้างทั้งหมด
     let cleared = supabase::clear_all_expenses(config, chat_id).await?;
 
-    // คำนวณ: (credit เดิม + ยอดโอนใหม่) - ยอดค้าง
-    // ถ้าบวก → มี credit เหลือ, ถ้าลบ → ยังขาดอยู่
     let net = current_credit + paid_amount - pending_total;
 
-    // อัปเดต credit balance
     let new_credit = if net > 0.01 { net } else { 0.0 };
     if let Err(e) = supabase::upsert_credit(config, chat_id, new_credit).await {
         error!("Failed to upsert credit: {}", e);
-        // ไม่ bail — credit ผิดพลาดไม่ควรทำให้ reply ทั้งหมดล้มเหลว
     }
 
-    // สร้าง reply
     let mut lines = vec![
         format!("✅ *บันทึกการโอน {:.0} บาท*", paid_amount),
-        format!("📋 เคลียร์ {} รายการ", cleared),
-        format!("💰 ยอดค้างก่อนหน้า: *{:.0} บาท*", pending_total),
+        format!("เคลียร์ {} รายการ", cleared),
+        format!("ยอดค้างก่อนหน้า: *{:.0} บาท*", pending_total),
     ];
 
     if current_credit > 0.01 {
-        lines.push(format!("🏦 credit เดิม: *{:.0} บาท*", current_credit));
+        lines.push(format!("credit เดิม: *{:.0} บาท*", current_credit));
     }
 
     if net > 0.01 {
         lines.push(format!(
-            "💚 โอนเกิน *{:.0} บาท* — เก็บเป็น credit หักรายการหน้าอัตโนมัติ",
+            "โอนเกิน *{:.0} บาท* — เก็บเป็น credit หักรายการหน้าอัตโนมัติ",
             net
         ));
     } else if net < -0.01 {
         lines.push(format!("⚠️ ยังขาดอยู่ *{:.0} บาท*", net.abs()));
     } else {
-        lines.push("ยอดตรงพอดี! 🎯".to_string());
+        lines.push("ยอดตรงพอดี".to_string());
     }
 
     Ok(lines.join("\n"))
@@ -290,10 +282,7 @@ pub async fn handle_cancel(bot: Bot, msg: Message, config: BotConfig, cmd: Comma
                 .unwrap_or(0.0);
             bot.send_message(
                 chat_id,
-                format!(
-                    "🗑️ ยกเลิกรายการ #{} แล้ว\n💰 ยอดค้างเหลือ: *{:.0} บาท*",
-                    id, total
-                ),
+                format!("ยกเลิกรายการ #{} แล้ว\nยอดค้างเหลือ: *{:.0} บาท*", id, total),
             )
             .parse_mode(teloxide::types::ParseMode::Markdown)
             .await?;
@@ -321,16 +310,11 @@ pub async fn handle_clear(bot: Bot, msg: Message, config: BotConfig) -> Result<(
     let cleared = supabase::clear_all_expenses(&config, chat_id.0).await?;
 
     if cleared == 0 {
-        bot.send_message(chat_id, "✨ ไม่มีรายการค้างชำระอยู่แล้ว")
-            .await?;
+        bot.send_message(chat_id, "ไม่มีรายการค้างชำระอยู่แล้ว").await?;
     } else {
         bot.send_message(
             chat_id,
-            format!(
-                "🎉 *เคลียร์แล้ว!*\n\
-                 ✅ {} รายการ รวม *{:.0} บาท*",
-                cleared, total
-            ),
+            format!("✅ *เคลียร์แล้ว!*\n{} รายการ รวม *{:.0} บาท*", cleared, total),
         )
         .parse_mode(teloxide::types::ParseMode::Markdown)
         .await?;

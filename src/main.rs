@@ -53,13 +53,13 @@ async fn main() -> Result<()> {
         .with_env_filter("kaobot=debug,teloxide=info")
         .init();
 
-    info!("🤖 KaoBot starting...");
+    info!("KaoBot starting...");
 
     let bot = Bot::from_env();
     let config: BotConfig = std::sync::Arc::new(Config::from_env()?);
 
     if config.allowed_chat_id.is_none() {
-        info!("⚠️  ALLOWED_CHAT_ID not set — bot will respond to ALL chats");
+        info!("ALLOWED_CHAT_ID not set — bot will respond to ALL chats");
         info!("   Send a message in your group to see the chat_id in logs");
     }
 
@@ -149,25 +149,23 @@ async fn handle_text_expense(bot: Bot, msg: Message, config: BotConfig) -> Resul
                     let net_due = (total - credit).max(0.0);
 
                     let reply = if credit > 0.01 && net_due < 0.01 {
-                        // credit มากพอ ยังไม่ต้องโอน
                         format!(
                             "✅ บันทึกแล้ว: *{}* {:.0} บาท\n\
-                             🏦 หัก credit แล้ว — ยังไม่ต้องโอน (credit เหลือ *{:.0} บาท*)",
+                             หัก credit แล้ว — ยังไม่ต้องโอน (credit เหลือ *{:.0} บาท*)",
                             item,
                             amount,
                             credit - total,
                         )
                     } else if credit > 0.01 {
-                        // มี credit บางส่วน
                         format!(
                             "✅ บันทึกแล้ว: *{}* {:.0} บาท\n\
-                             🏦 หัก credit *{:.0} บาท* แล้ว\n\
-                             💰 ยอดที่ต้องโอน: *{:.0} บาท*",
+                             หัก credit *{:.0} บาท* แล้ว\n\
+                             ยอดที่ต้องโอน: *{:.0} บาท*",
                             item, amount, credit, net_due,
                         )
                     } else {
                         format!(
-                            "✅ บันทึกแล้ว: *{}* {:.0} บาท\n💰 ยอดค้าง: *{:.0} บาท*",
+                            "✅ บันทึกแล้ว: *{}* {:.0} บาท\nยอดค้าง: *{:.0} บาท*",
                             item, amount, total
                         )
                     };
