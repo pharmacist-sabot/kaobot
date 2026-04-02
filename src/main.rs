@@ -149,23 +149,34 @@ async fn handle_text_expense(bot: Bot, msg: Message, config: BotConfig) -> Resul
                     let net_due = (total - credit).max(0.0);
 
                     let reply = if credit > 0.01 && net_due < 0.01 {
+                        // credit เหลือพอ — หักแล้วไม่ต้องโอน
+                        let new_credit = credit - total;
+                        if let Err(e) =
+                            supabase::upsert_credit(&config, chat_id.0, new_credit.max(0.0)).await
+                        {
+                            tracing::error!("Failed to deduct credit: {}", e);
+                        }
                         format!(
-                            "✅ บันทึกแล้ว: *{}* {:.0} บาท\n\
-                             หัก credit แล้ว — ยังไม่ต้องโอน (credit เหลือ *{:.0} บาท*)",
+                            "✅ บันทึกแล้ว: *{}* {:.2} บาท\n\
+                             หัก credit แล้ว — ยังไม่ต้องโอน (credit เหลือ *{:.2} บาท*)",
                             item,
                             amount,
-                            credit - total,
+                            new_credit.max(0.0),
                         )
                     } else if credit > 0.01 {
+                        // credit ไม่พอ — หักบางส่วน
+                        if let Err(e) = supabase::upsert_credit(&config, chat_id.0, 0.0).await {
+                            tracing::error!("Failed to deduct credit: {}", e);
+                        }
                         format!(
-                            "✅ บันทึกแล้ว: *{}* {:.0} บาท\n\
-                             หัก credit *{:.0} บาท* แล้ว\n\
-                             ยอดที่ต้องโอน: *{:.0} บาท*",
+                            "✅ บันทึกแล้ว: *{}* {:.2} บาท\n\
+                             หัก credit *{:.2} บาท* แล้ว\n\
+                             ยอดที่ต้องโอน: *{:.2} บาท*",
                             item, amount, credit, net_due,
                         )
                     } else {
                         format!(
-                            "✅ บันทึกแล้ว: *{}* {:.0} บาท\nยอดค้าง: *{:.0} บาท*",
+                            "✅ บันทึกแล้ว: *{}* {:.2} บาท\nยอดค้าง: *{:.2} บาท*",
                             item, amount, total
                         )
                     };

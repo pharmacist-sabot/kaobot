@@ -179,12 +179,14 @@ pub async fn get_pending_expenses(config: &BotConfig, chat_id: i64) -> Result<Ve
 
 /// ดึงรายการวันนี้ (Asia/Bangkok)
 pub async fn get_today_expenses(config: &BotConfig, chat_id: i64) -> Result<Vec<Expense>> {
-    // วันนี้ตี 0 ที่ +07:00 = เมื่อวาน 17:00 UTC
-    let now = Utc::now();
-    let today_start = format!(
-        "{}T17:00:00Z",
-        (now - chrono::TimeDelta::hours(7)).format("%Y-%m-%d")
-    );
+    // คำนวณจุดเริ่มต้นของวันนี้ตามเวลาไทย (UTC+7)
+    // 00:00 +07:00 = 17:00 UTC วันก่อนหน้า
+    let bkk = chrono::FixedOffset::east_opt(7 * 3600).unwrap();
+    let now_bkk = Utc::now().with_timezone(&bkk);
+    let today_midnight_bkk = now_bkk.date_naive().and_hms_opt(0, 0, 0).unwrap();
+    // แปลงกลับเป็น UTC: ลบ offset 7 ชั่วโมง
+    let today_start_utc = today_midnight_bkk - chrono::TimeDelta::hours(7);
+    let today_start = today_start_utc.and_utc().to_rfc3339();
 
     let res = Client::new()
         .get(format!(
@@ -237,18 +239,26 @@ pub async fn clear_all_expenses(config: &BotConfig, chat_id: i64) -> Result<u64>
 }
 
 /// ลบรายการเดียวด้วย id (กรณีกรอกผิด)
+/// ใช้ Prefer: return=representation เพื่อตรวจสอบว่าลบจริงหรือไม่
 pub async fn cancel_expense(config: &BotConfig, chat_id: i64, id: i64) -> Result<bool> {
     let res = Client::new()
         .delete(format!(
             "{}/rest/v1/expenses?id=eq.{}&chat_id=eq.{}&is_cleared=eq.false",
             config.supabase_url, id, chat_id
         ))
-        .headers(build_headers(config))
+        .headers(build_headers_with_representation(config))
         .send()
         .await
         .context("Failed to delete expense")?;
 
-    Ok(res.status().is_success())
+    if !res.status().is_success() {
+        return Ok(false);
+    }
+
+    // Supabase returns the deleted rows when using return=representation
+    // If the array is empty, no row was actually deleted
+    let deleted: Vec<serde_json::Value> = res.json().await.unwrap_or_default();
+    Ok(!deleted.is_empty())
 }
 
 /// ดึง credit balance ของ chat (เงินที่โอนมาเกินยอดค้าง)

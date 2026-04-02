@@ -318,7 +318,7 @@ pub async fn handle_slip_image(bot: Bot, msg: Message, config: BotConfig) -> Res
                     Ok(settle_reply) => {
                         let reply = format!(
                             "✅ *อ่านสลิปสำเร็จ*\n\
-                             ยอดโอน: *{:.0} บาท*\n\
+                             ยอดโอน: *{:.2} บาท*\n\
                              {}\n\
                              {}",
                             amount, slip_info.raw_text, settle_reply
@@ -350,12 +350,12 @@ pub async fn handle_slip_image(bot: Bot, msg: Message, config: BotConfig) -> Res
                 let reply = format!(
                     "ได้รับสลิปแล้ว แต่อ่านยอดไม่ได้\n\
                      _{}_\n\n\
-                     ยอดค้าง: *{:.0} บาท*{}\n\
+                     ยอดค้าง: *{:.2} บาท*{}\n\
                      กรุณาพิมพ์ `/paid <จำนวน>` เพื่อบันทึกเอง",
                     slip_info.raw_text,
                     net_due,
                     if credit > 0.01 {
-                        format!(" _(หลังหัก credit {:.0}฿)_", credit)
+                        format!(" _(หลังหัก credit {:.2}฿)_", credit)
                     } else {
                         String::new()
                     }
@@ -381,11 +381,11 @@ pub async fn handle_slip_image(bot: Bot, msg: Message, config: BotConfig) -> Res
                 processing_msg.id,
                 format!(
                     "❌ อ่านสลิปไม่สำเร็จ\n\
-                     ยอดค้าง: *{:.0} บาท*{}\n\
+                     ยอดค้าง: *{:.2} บาท*{}\n\
                      กรุณาพิมพ์ `/paid <จำนวน>` แทน",
                     net_due,
                     if credit > 0.01 {
-                        format!(" _(หลังหัก credit {:.0}฿)_", credit)
+                        format!(" _(หลังหัก credit {:.2}฿)_", credit)
                     } else {
                         String::new()
                     }
