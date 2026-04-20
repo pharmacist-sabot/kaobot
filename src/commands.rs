@@ -2,8 +2,8 @@
 // ParseMode::Markdown is intentionally used (see main.rs for rationale).
 #![allow(deprecated)]
 
-use std::cmp::Reverse;
 use anyhow::Result;
+use std::cmp::Reverse;
 use teloxide::{prelude::*, utils::command::BotCommands};
 use tracing::error;
 
