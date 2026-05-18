@@ -7,6 +7,7 @@ use base64::{Engine as _, engine::general_purpose};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use teloxide::prelude::*;
+use teloxide::types::FileId;
 use tracing::{error, info, warn};
 
 use crate::{BotConfig, supabase};
@@ -127,8 +128,8 @@ pub struct SlipInfo {
 // ---- Private helpers ----
 
 /// ดาวน์โหลดไฟล์จาก Telegram แล้ว encode เป็น base64
-async fn download_photo_base64(bot: &Bot, file_id: &str) -> Result<String> {
-    let file = bot.get_file(file_id).await?;
+async fn download_photo_base64(bot: &Bot, file_id: FileId) -> Result<String> {
+    let file = bot.get_file(file_id.clone()).await?;
     let url = format!(
         "https://api.telegram.org/file/bot{}/{}",
         bot.token(),
@@ -289,7 +290,7 @@ pub async fn handle_slip_image(bot: Bot, msg: Message, config: BotConfig) -> Res
     let processing_msg = bot.send_message(chat_id, "กำลังอ่านสลิป...").await?;
 
     // ดาวน์โหลดรูปจาก Telegram
-    let image_b64 = match download_photo_base64(&bot, &best_photo.file.id).await {
+    let image_b64 = match download_photo_base64(&bot, best_photo.file.id.clone()).await {
         Ok(b64) => b64,
         Err(e) => {
             error!("Download photo error: {}", e);
