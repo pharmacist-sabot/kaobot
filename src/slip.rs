@@ -1,4 +1,4 @@
-// slip.rs — อ่านสลิปโอนเงินด้วย Gemini Vision API
+// slip.rs — Read transfer slip amounts using Gemini Vision API
 // ParseMode::Markdown is intentionally used (see main.rs for rationale).
 #![allow(deprecated)]
 
@@ -99,16 +99,16 @@ struct GeminiResponsePart {
   text: Option<String>,
 }
 
-/// Extract JSON object จาก Gemini response แบบ robust
+/// Extract JSON object from Gemini response robustly
 ///
-/// รองรับทุก format ที่ Gemini อาจส่งกลับมา:
+/// Supports all formats Gemini may return:
 /// 1. Raw JSON:           {"amount": 100.0, "note": "..."}
 /// 2. ```json fence:      ```json\n{...}\n```
 /// 3. ``` fence:          ```\n{...}\n```
-/// 4. JSON กลางข้อความ:  "ยอดคือ {"amount": 100.0} ครับ"
-/// 5. Truncated JSON:     {"amount": 100.  ← ตรวจจับและ return None
+/// 4. JSON in text:       "the amount is {"amount": 100.0} thanks"
+/// 5. Truncated JSON:     {"amount": 100.  ← detect and return None
 fn extract_json_object(raw: &str) -> Option<String> {
-  // หา { แรกและ } สุดท้าย เพื่อ extract JSON object ออกมา
+  // Find first { and last } to extract JSON object
   let start = raw.find('{')?;
   let end = raw.rfind('}')?;
   if end < start {
@@ -127,7 +127,7 @@ pub struct SlipInfo {
 
 // ---- Private helpers ----
 
-/// ดาวน์โหลดไฟล์จาก Telegram แล้ว encode เป็น base64
+/// Download file from Telegram and encode as base64
 async fn download_photo_base64(bot: &Bot, file_id: FileId) -> Result<String> {
   let file = bot.get_file(file_id.clone()).await?;
   let url = format!(
@@ -141,13 +141,13 @@ async fn download_photo_base64(bot: &Bot, file_id: FileId) -> Result<String> {
 
 // ---- Public API ----
 
-/// ส่งรูปให้ Gemini อ่านยอดเงินจากสลิป
+/// Send image to Gemini to read amount from slip
 ///
 /// ใช้ `gemini-2.0-flash` — รองรับ multimodal (image + text) ใน single request
 /// โดยส่ง base64-encoded JPEG ผ่าน `inlineData` part ตาม Gemini REST API spec
 pub async fn read_slip_with_gemini(gemini_key: &str, image_base64: &str) -> Result<SlipInfo> {
-  // Prompt สั้นที่สุดเท่าที่จะได้ — ยิ่งสั้นยิ่งไม่ให้โอกาส Gemini เพิ่มข้อความ
-  // ใช้ภาษาอังกฤษเพื่อลด token overhead
+  // Shortest prompt possible — shorter means less chance for Gemini to add extra text
+  // Using English to reduce token overhead
   let prompt = "Read the transfer amount from this Thai bank slip.\n\
         Reply with ONLY a raw JSON object, no markdown, no explanation:\n\
         {\"amount\": 100.00, \"note\": \"100 THB\"}\n\
@@ -156,7 +156,7 @@ pub async fn read_slip_with_gemini(gemini_key: &str, image_base64: &str) -> Resu
   let request = GeminiRequest {
     contents: vec![GeminiContent {
       parts: vec![
-        // รูปภาพสลิปก่อน แล้วตามด้วย prompt text
+        // Slip image first, then prompt text
         GeminiPart::InlineData {
           inline_data: InlineData {
             mime_type: "image/jpeg".to_string(),
@@ -169,16 +169,16 @@ pub async fn read_slip_with_gemini(gemini_key: &str, image_base64: &str) -> Resu
       ],
     }],
     generation_config: GenerationConfig {
-      // temperature 0 → ผลลัพธ์ deterministic เหมาะสำหรับ structured extraction
-      // 1024 tokens เผื่อ overhead กรณี model มี thinking tokens แทรก
+      // temperature 0 → deterministic output, suitable for structured extraction
+      // 1024 tokens buffer for overhead in case model inserts thinking tokens
       max_output_tokens: 1024,
-      // บังคับ JSON mode ที่ API level — Gemini จะไม่ใส่ markdown fence หรือ
-      // ข้อความอธิบายใดๆ นอกจาก JSON object ที่ถูกต้องเท่านั้น
+      // Enforce JSON mode at API level — Gemini will not include markdown fence or
+      // explanatory text, only a valid JSON object
       response_mime_type: "application/json".to_string(),
       temperature: 0.0,
-      // ปิด thinking mode — model นี้เป็น thinking model (gemini-3-flash-preview)
-      // thinking tokens กิน budget ใน maxOutputTokens ทำให้ JSON output ถูกตัด
-      // thinkingBudget: 0 = ปิด thinking สมบูรณ์
+      // Disable thinking mode — this model is a thinking model (gemini-3-flash-preview)
+      // thinking tokens consume budget in maxOutputTokens, causing JSON output to be truncated
+      // thinkingBudget: 0 = thinking fully disabled
       thinking_config: ThinkingConfig { thinking_budget: 0 },
     },
   };
@@ -202,7 +202,7 @@ pub async fn read_slip_with_gemini(gemini_key: &str, image_base64: &str) -> Resu
     anyhow::bail!("Gemini API error {}: {}", status, body);
   }
 
-  // อ่าน raw body ก่อน deserialize เพื่อให้ log เห็น response เต็มๆ เสมอ
+  // Read raw body before deserialize so logs always show full response
   let raw_body = response.text().await?;
   info!("Gemini raw response body: {}", raw_body);
 
@@ -214,11 +214,11 @@ pub async fn read_slip_with_gemini(gemini_key: &str, image_base64: &str) -> Resu
     )
   })?;
 
-  // ดึง candidate แรก พร้อม finishReason
+  // Get first candidate with finishReason
   let candidate = gemini_resp.candidates.into_iter().next();
 
-  // ตรวจ finishReason — Gemini อาจส่งเป็น string "MAX_TOKENS" หรือ "STOP"
-  // บาง version ส่งเป็นตัวเลข "2" (MAX_TOKENS) หรือ "1" (STOP) ด้วย
+  // Check finishReason — Gemini may send as string "MAX_TOKENS" or "STOP"
+  // Some versions send as numbers "2" (MAX_TOKENS) or "1" (STOP)
   if let Some(ref c) = candidate {
     let reason = c.finish_reason.as_deref().unwrap_or("");
     let is_truncated = reason == "MAX_TOKENS" || reason == "2";
@@ -241,7 +241,7 @@ pub async fn read_slip_with_gemini(gemini_key: &str, image_base64: &str) -> Resu
 
   info!("Gemini extracted text: {:?}", text);
 
-  // Extract JSON object ออกจาก response ไม่ว่า Gemini จะตอบใน format ไหน
+  // Extract JSON object from response regardless of Gemini's format
   let json_str = extract_json_object(&text);
 
   let parsed: serde_json::Value = match json_str.as_deref() {
@@ -264,11 +264,11 @@ pub async fn read_slip_with_gemini(gemini_key: &str, image_base64: &str) -> Resu
   })
 }
 
-/// Handler: รับรูปภาพ → อ่านสลิปด้วย Gemini → บันทึก payment → เคลียร์รายการ
+/// Handler: receive image → read slip with Gemini → record payment → clear items
 pub async fn handle_slip_image(bot: Bot, msg: Message, config: BotConfig) -> Result<()> {
   let chat_id = msg.chat.id;
 
-  // ตรวจสอบ allowed chat
+  // Check allowed chat
   if let Some(allowed) = config.allowed_chat_id {
     if chat_id.0 != allowed {
       return Ok(());
@@ -280,16 +280,16 @@ pub async fn handle_slip_image(bot: Bot, msg: Message, config: BotConfig) -> Res
     None => return Ok(()),
   };
 
-  // เลือกรูปที่ resolution สูงสุด (รายการสุดท้ายใน array)
+  // Select highest resolution image (last item in array)
   let best_photo = match photos.last() {
     Some(p) => p,
     None => return Ok(()),
   };
 
-  // แจ้ง user ว่ากำลังประมวลผล
+  // Notify user that processing is in progress
   let processing_msg = bot.send_message(chat_id, "กำลังอ่านสลิป...").await?;
 
-  // ดาวน์โหลดรูปจาก Telegram
+  // Download image from Telegram
   let image_b64 = match download_photo_base64(&bot, best_photo.file.id.clone()).await {
     Ok(b64) => b64,
     Err(e) => {
@@ -301,11 +301,11 @@ pub async fn handle_slip_image(bot: Bot, msg: Message, config: BotConfig) -> Res
     }
   };
 
-  // ส่งรูปให้ Gemini อ่าน
+  // Send image to Gemini for reading
   match read_slip_with_gemini(&config.gemini_key, &image_b64).await {
     Ok(slip_info) => {
       if let Some(amount) = slip_info.amount {
-        // ใช้ settle_payment เพื่อบันทึก payment, เคลียร์รายการ และจัดการ credit
+        // Use settle_payment to record payment, clear items, and manage credit
         let note = slip_info.raw_text.clone();
         match crate::commands::settle_payment(
           &config,
@@ -342,7 +342,7 @@ pub async fn handle_slip_image(bot: Bot, msg: Message, config: BotConfig) -> Res
           }
         }
       } else {
-        // Gemini อ่านยอดไม่ได้ — ให้ user ยืนยันเอง
+        // Gemini couldn't read amount — ask user to confirm manually
         let credit = supabase::get_credit_balance(&config, chat_id.0)
           .await
           .unwrap_or(0.0);
@@ -411,7 +411,7 @@ pub async fn handle_slip_image(bot: Bot, msg: Message, config: BotConfig) -> Res
 mod tests {
   use super::*;
 
-  /// ทดสอบ parse JSON response ที่ Gemini ตอบกลับมาถูกต้อง
+  /// Test parsing valid JSON response from Gemini
   #[test]
   fn test_parse_valid_gemini_json() {
     let raw = r#"{"amount": 500.00, "note": "โอนเงิน 500 บาท เมื่อ 18/03 10:30"}"#;
@@ -423,7 +423,7 @@ mod tests {
     );
   }
 
-  /// ทดสอบ fallback เมื่ออ่านยอดไม่ได้ (amount = null)
+  /// Test fallback when amount cannot be read (amount = null)
   #[test]
   fn test_parse_null_amount() {
     let raw = r#"{"amount": null, "note": "อ่านยอดไม่ได้"}"#;
@@ -432,7 +432,7 @@ mod tests {
     assert_eq!(parsed["note"].as_str(), Some("อ่านยอดไม่ได้"));
   }
 
-  /// ทดสอบ graceful fallback เมื่อ Gemini ตอบกลับไม่ใช่ JSON เลย
+  /// Test graceful fallback when Gemini response is not JSON at all
   #[test]
   fn test_parse_non_json_fallback() {
     let raw = "ขออภัย ไม่สามารถอ่านสลิปได้";
@@ -442,7 +442,7 @@ mod tests {
     assert_eq!(parsed["note"].as_str(), Some(raw));
   }
 
-  /// ทดสอบ GeminiRequest serialises ออกมาถูกต้องตาม Gemini REST API spec
+  /// Test GeminiRequest serializes correctly per Gemini REST API spec
   #[test]
   fn test_request_serialization() {
     let req = GeminiRequest {
@@ -469,15 +469,15 @@ mod tests {
 
     let json = serde_json::to_value(&req).unwrap();
 
-    // ตรวจ inlineData part
+    // Verify inlineData part
     let inline = &json["contents"][0]["parts"][0]["inlineData"];
     assert_eq!(inline["mimeType"], "image/jpeg");
     assert_eq!(inline["data"], "base64data==");
 
-    // ตรวจ text part
+    // Verify text part
     assert_eq!(json["contents"][0]["parts"][1]["text"], "อ่านสลิปนี้");
 
-    // ตรวจ generationConfig
+    // Verify generationConfig
     assert_eq!(json["generationConfig"]["temperature"], 0.0);
     assert_eq!(json["generationConfig"]["maxOutputTokens"], 1024);
     assert_eq!(
@@ -490,7 +490,7 @@ mod tests {
     );
   }
 
-  /// ทดสอบ extract_json_object — ```json fence
+  /// Test extract_json_object — ```json fence
   #[test]
   fn test_extract_json_fence_with_lang() {
     let input = "```json\n{\"amount\": 100.0, \"note\": \"test\"}\n```";
@@ -499,7 +499,7 @@ mod tests {
     assert_eq!(parsed["amount"].as_f64(), Some(100.0));
   }
 
-  /// ทดสอบ extract_json_object — ``` fence ไม่มี lang
+  /// Test extract_json_object — ``` fence without lang
   #[test]
   fn test_extract_json_fence_no_lang() {
     let input = "```\n{\"amount\": 200.0, \"note\": \"test2\"}\n```";
@@ -508,7 +508,7 @@ mod tests {
     assert_eq!(parsed["amount"].as_f64(), Some(200.0));
   }
 
-  /// ทดสอบ extract_json_object — raw JSON ไม่มี fence
+  /// Test extract_json_object — raw JSON without fence
   #[test]
   fn test_extract_json_no_fence() {
     let input = "{\"amount\": 300.0, \"note\": \"no fence\"}";
@@ -517,7 +517,7 @@ mod tests {
     assert_eq!(parsed["amount"].as_f64(), Some(300.0));
   }
 
-  /// ทดสอบ extract_json_object — JSON อยู่กลางข้อความ
+  /// Test extract_json_object — JSON embedded in text
   #[test]
   fn test_extract_json_embedded_in_text() {
     let input = "ยอดโอนคือ {\"amount\": 50.0, \"note\": \"embedded\"} ครับ";
@@ -526,24 +526,24 @@ mod tests {
     assert_eq!(parsed["amount"].as_f64(), Some(50.0));
   }
 
-  /// ทดสอบ extract_json_object — ไม่มี JSON เลย ต้อง return None
+  /// Test extract_json_object — no JSON at all, must return None
   #[test]
   fn test_extract_json_no_json() {
     let input = "ขออภัย ไม่สามารถอ่านสลิปได้";
     assert!(extract_json_object(input).is_none());
   }
 
-  /// ทดสอบ extract_json_object — JSON ถูก truncate ต้อง parse ไม่ผ่าน
+  /// Test extract_json_object — truncated JSON should fail to parse
   #[test]
   fn test_extract_json_truncated() {
     let input = "{\"amount\": 100.";
-    // extract ได้ แต่ parse ไม่ผ่าน → ควร fallback
+    // Extract succeeds but parse fails → should fallback
     let result = extract_json_object(input);
-    // ไม่มี closing } → None
+    // No closing } → None
     assert!(result.is_none());
   }
 
-  /// ทดสอบ round-trip: extract แล้ว parse JSON ได้ถูกต้อง
+  /// Test round-trip: extract then parse JSON correctly
   #[test]
   fn test_extract_then_parse() {
     let input = "```json\n{\"amount\": 100.0, \"note\": \"โอน 100 บาท\"}\n```";
@@ -553,7 +553,7 @@ mod tests {
     assert_eq!(parsed["note"].as_str(), Some("โอน 100 บาท"));
   }
 
-  /// ทดสอบ GeminiResponse deserialises จาก JSON ที่ API ส่งกลับมา
+  /// Test GeminiResponse deserializes from JSON returned by API
   #[test]
   fn test_response_deserialization() {
     let raw = r#"{

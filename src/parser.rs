@@ -1,4 +1,4 @@
-// parser.rs — แยก "ชื่อ ตัวเลข" ออกจากข้อความ
+// parser.rs — Parse "name amount" from text
 
 use regex::Regex;
 use std::sync::OnceLock;
@@ -7,14 +7,14 @@ static EXPENSE_RE: OnceLock<Regex> = OnceLock::new();
 
 fn expense_regex() -> &'static Regex {
   EXPENSE_RE.get_or_init(|| {
-    // รูปแบบ: ข้อความใด ๆ + เว้นวรรค + ตัวเลข (รองรับทศนิยม)
-    // เช่น: "ข้าว 60", "กาแฟ 65.50", "ของใช้ในบ้าน 1200"
+    // Pattern: any text + space + number (supports decimals)
+    // Examples: "rice 60", "coffee 65.50", "household items 1200"
     Regex::new(r"^(.+?)\s+(\d+(?:\.\d{1,2})?)$").unwrap()
   })
 }
 
-/// Parse ข้อความเป็น (item_name, amount)
-/// คืน None ถ้า format ไม่ตรง
+/// Parse text into (item_name, amount)
+/// Returns None if format doesn't match
 pub fn parse_expense(text: &str) -> Option<(String, f64)> {
   let text = text.trim();
   let re = expense_regex();

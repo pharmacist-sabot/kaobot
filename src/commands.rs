@@ -218,14 +218,14 @@ pub async fn handle_paid(bot: Bot, msg: Message, config: BotConfig, cmd: Command
   Ok(())
 }
 
-/// Logic กลางสำหรับการรับเงิน (ทั้ง /paid และสลิป)
+/// Shared logic for receiving payments (both /paid and slip)
 ///
-/// ขั้นตอน:
-/// 1. ดึงยอดค้างและ credit ปัจจุบัน
-/// 2. บันทึก payment record
-/// 3. เคลียร์รายการค้างทั้งหมด
-/// 4. คำนวณส่วนต่าง — ถ้าโอนเกิน เก็บเป็น credit สำหรับหักรายการถัดไป
-/// 5. คืน reply message
+/// Steps:
+/// 1. Fetch pending total and current credit
+/// 2. Record payment record
+/// 3. Clear all pending items
+/// 4. Calculate difference — if overpaid, store as credit for next items
+/// 5. Return reply message
 pub async fn settle_payment(
   config: &BotConfig,
   chat_id: i64,

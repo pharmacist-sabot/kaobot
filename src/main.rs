@@ -1,7 +1,7 @@
 // ============================================================
 //  KaoBot — Telegram expense tracker bot
-//  ภรรยากรอก "ข้าว 60" → บันทึก Supabase → สรุปยอด
-//  ส่งสลิป หรือ /paid 500 → เคลียร์หนี้
+//  Wife types "rice 60" → saved to Supabase → summary
+//  Send slip or /paid 500 → clear debts
 // ============================================================
 // ParseMode::Markdown is the legacy mode but is intentionally used here because
 // our message templates rely on simple *bold* and _italic_ syntax that is
@@ -146,7 +146,7 @@ async fn handle_text_expense(bot: Bot, msg: Message, config: BotConfig) -> Resul
           let net_due = (total - credit).max(0.0);
 
           let reply = if credit > 0.01 && net_due < 0.01 {
-            // credit เหลือพอ — หักแล้วไม่ต้องโอน
+            // credit sufficient — deducted, no transfer needed
             let new_credit = credit - total;
             if let Err(e) = supabase::upsert_credit(&config, chat_id.0, new_credit.max(0.0)).await {
               tracing::error!("Failed to deduct credit: {}", e);
@@ -159,7 +159,7 @@ async fn handle_text_expense(bot: Bot, msg: Message, config: BotConfig) -> Resul
               new_credit.max(0.0),
             )
           } else if credit > 0.01 {
-            // credit ไม่พอ — หักบางส่วน
+            // credit insufficient — partial deduction
             if let Err(e) = supabase::upsert_credit(&config, chat_id.0, 0.0).await {
               tracing::error!("Failed to deduct credit: {}", e);
             }

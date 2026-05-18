@@ -1,8 +1,8 @@
 // supabase.rs — Supabase REST API client
 //
 // Credit system:
-// เมื่อโอนเงินมาเกินยอดค้าง ส่วนที่เกินจะถูกเก็บเป็น "credit"
-// รายการค่าใช้จ่ายใหม่จะถูกหักจาก credit ก่อน ถ้า credit เหลือพอก็ไม่ต้องโอนเพิ่ม
+// When a transfer exceeds the pending amount, the excess is stored as "credit"
+// New expenses are deducted from credit first; if credit is sufficient, no transfer is needed
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
@@ -103,7 +103,7 @@ fn build_headers_with_representation(config: &BotConfig) -> reqwest::header::Hea
 
 // ---- Operations ----
 
-/// บันทึกรายการใหม่
+/// Record a new expense
 pub async fn insert_expense(
   config: &BotConfig,
   chat_id: i64,
@@ -137,7 +137,7 @@ pub async fn insert_expense(
   Ok(())
 }
 
-/// ดึงยอดรวมที่ยังค้างอยู่
+/// Get total pending amount
 pub async fn get_pending_total(config: &BotConfig, chat_id: i64) -> Result<f64> {
   let res = Client::new()
     .get(format!(
@@ -162,7 +162,7 @@ pub async fn get_pending_total(config: &BotConfig, chat_id: i64) -> Result<f64> 
   )
 }
 
-/// ดึงรายการที่ยังค้างอยู่ทั้งหมด
+/// Get all pending expenses
 pub async fn get_pending_expenses(config: &BotConfig, chat_id: i64) -> Result<Vec<Expense>> {
   let res = Client::new()
     .get(format!(
@@ -179,14 +179,14 @@ pub async fn get_pending_expenses(config: &BotConfig, chat_id: i64) -> Result<Ve
   Ok(expenses)
 }
 
-/// ดึงรายการวันนี้ (Asia/Bangkok)
+/// Get today's expenses (Asia/Bangkok)
 pub async fn get_today_expenses(config: &BotConfig, chat_id: i64) -> Result<Vec<Expense>> {
-  // คำนวณจุดเริ่มต้นของวันนี้ตามเวลาไทย (UTC+7)
-  // 00:00 +07:00 = 17:00 UTC วันก่อนหน้า
+  // Calculate start of today in Thailand time (UTC+7)
+  // 00:00 +07:00 = 17:00 UTC previous day
   let bkk = chrono::FixedOffset::east_opt(7 * 3600).unwrap();
   let now_bkk = Utc::now().with_timezone(&bkk);
   let today_midnight_bkk = now_bkk.date_naive().and_hms_opt(0, 0, 0).unwrap();
-  // แปลงกลับเป็น UTC: ลบ offset 7 ชั่วโมง
+  // Convert back to UTC: subtract 7 hour offset
   let today_start_utc = today_midnight_bkk - chrono::TimeDelta::hours(7);
   let today_start = today_start_utc.and_utc().to_rfc3339();
 
@@ -208,7 +208,7 @@ pub async fn get_today_expenses(config: &BotConfig, chat_id: i64) -> Result<Vec<
   Ok(expenses)
 }
 
-/// เคลียร์รายการทั้งหมด (หลังโอนเงิน)
+/// Clear all expenses (after transfer)
 pub async fn clear_all_expenses(config: &BotConfig, chat_id: i64) -> Result<u64> {
   let expenses = get_pending_expenses(config, chat_id).await?;
   let count = expenses.len() as u64;
@@ -240,8 +240,8 @@ pub async fn clear_all_expenses(config: &BotConfig, chat_id: i64) -> Result<u64>
   Ok(count)
 }
 
-/// ลบรายการเดียวด้วย id (กรณีกรอกผิด)
-/// ใช้ Prefer: return=representation เพื่อตรวจสอบว่าลบจริงหรือไม่
+/// Delete a single expense by id (in case of incorrect entry)
+/// Uses Prefer: return=representation to verify deletion actually occurred
 pub async fn cancel_expense(config: &BotConfig, chat_id: i64, id: i64) -> Result<bool> {
   let res = Client::new()
     .delete(format!(
@@ -263,8 +263,8 @@ pub async fn cancel_expense(config: &BotConfig, chat_id: i64, id: i64) -> Result
   Ok(!deleted.is_empty())
 }
 
-/// ดึง credit balance ของ chat (เงินที่โอนมาเกินยอดค้าง)
-/// คืน 0.0 ถ้ายังไม่เคยมี credit
+/// Get credit balance for a chat (overpaid amount)
+/// Returns 0.0 if no credit exists yet
 pub async fn get_credit_balance(config: &BotConfig, chat_id: i64) -> Result<f64> {
   let res = Client::new()
     .get(format!(
@@ -284,8 +284,8 @@ pub async fn get_credit_balance(config: &BotConfig, chat_id: i64) -> Result<f64>
   Ok(rows.first().map(|r| r.balance).unwrap_or(0.0))
 }
 
-/// อัปเดต credit balance (upsert)
-/// ถ้ายังไม่มี row จะ insert ใหม่ ถ้ามีแล้วจะ update
+/// Update credit balance (upsert)
+/// Inserts new row if none exists, otherwise updates
 pub async fn upsert_credit(config: &BotConfig, chat_id: i64, new_balance: f64) -> Result<()> {
   let mut headers = build_headers(config);
   headers.insert(
@@ -316,7 +316,7 @@ pub async fn upsert_credit(config: &BotConfig, chat_id: i64, new_balance: f64) -
   Ok(())
 }
 
-/// บันทึกการชำระเงิน
+/// Record a payment
 pub async fn insert_payment(
   config: &BotConfig,
   chat_id: i64,
