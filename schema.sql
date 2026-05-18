@@ -1,40 +1,40 @@
 -- ============================================
 -- KaoBot Database Schema
--- Run this in Supabase SQL Editor
+-- Run this once in Supabase SQL Editor
 -- ============================================
 
--- Table: expenses (รายการค่าใช้จ่าย)
+-- Table: expenses
 CREATE TABLE IF NOT EXISTS expenses (
     id          BIGSERIAL PRIMARY KEY,
-    item        TEXT        NOT NULL,           -- ชื่อรายการ เช่น "ข้าว"
-    amount      NUMERIC(10,2) NOT NULL,         -- จำนวนเงิน เช่น 60.00
-    paid_by     TEXT        NOT NULL DEFAULT 'wife',  -- ใครจ่าย
-    chat_id     BIGINT      NOT NULL,           -- Telegram chat ID
-    message_id  BIGINT,                        -- Telegram message ID (สำหรับ dedup)
-    is_cleared  BOOLEAN     NOT NULL DEFAULT FALSE,  -- เคลียร์แล้วหรือยัง
-    cleared_at  TIMESTAMPTZ,                   -- เวลาที่เคลียร์
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    item        TEXT            NOT NULL,
+    amount      NUMERIC(10,2)   NOT NULL,
+    paid_by     TEXT            NOT NULL DEFAULT 'wife',
+    chat_id     BIGINT          NOT NULL,
+    message_id  BIGINT,                         -- for deduplication
+    is_cleared  BOOLEAN         NOT NULL DEFAULT FALSE,
+    cleared_at  TIMESTAMPTZ,
+    created_at  TIMESTAMPTZ     NOT NULL DEFAULT NOW()
 );
 
--- Table: payments (บันทึกการโอนเงิน)
+-- Table: payments
 CREATE TABLE IF NOT EXISTS payments (
     id           BIGSERIAL PRIMARY KEY,
-    amount       NUMERIC(10,2) NOT NULL,        -- ยอดที่โอน
-    method       TEXT NOT NULL DEFAULT 'slip',  -- 'slip' | 'manual'
-    slip_image   TEXT,                          -- base64 หรือ URL รูปสลิป (optional)
-    chat_id      BIGINT NOT NULL,
+    amount       NUMERIC(10,2) NOT NULL,
+    method       TEXT          NOT NULL DEFAULT 'slip',  -- 'slip' | 'manual'
+    slip_image   TEXT,                                   -- base64 or URL (optional)
+    chat_id      BIGINT        NOT NULL,
     message_id   BIGINT,
-    note         TEXT,                          -- หมายเหตุ เช่น ข้อมูลจากสลิป
-    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    note         TEXT,                                   -- e.g. slip OCR notes
+    created_at   TIMESTAMPTZ   NOT NULL DEFAULT NOW()
 );
 
--- Index สำหรับ query เร็ว
+-- Indexes
 CREATE INDEX IF NOT EXISTS idx_expenses_chat_id     ON expenses(chat_id);
 CREATE INDEX IF NOT EXISTS idx_expenses_is_cleared  ON expenses(is_cleared);
 CREATE INDEX IF NOT EXISTS idx_expenses_created_at  ON expenses(created_at);
 CREATE INDEX IF NOT EXISTS idx_payments_chat_id     ON payments(chat_id);
 
--- View: ยอดค้างชำระ (ใช้ใน /summary command)
+-- View: outstanding balance (used by /summary)
 CREATE OR REPLACE VIEW pending_summary AS
 SELECT
     chat_id,
@@ -46,9 +46,9 @@ FROM expenses
 WHERE is_cleared = FALSE
 GROUP BY chat_id;
 
--- Table: credit_balance (ยอดเงินที่โอนมาเกินค้าง — นำไปหักรายการถัดไปอัตโนมัติ)
+-- Table: credit_balance (overpaid amount, auto-applied to future expenses)
 CREATE TABLE IF NOT EXISTS credit_balance (
-    chat_id     BIGINT        PRIMARY KEY,      -- 1 row ต่อ 1 chat
+    chat_id     BIGINT        PRIMARY KEY,      -- 1 row per chat
     balance     NUMERIC(10,2) NOT NULL DEFAULT 0.00,
     updated_at  TIMESTAMPTZ   NOT NULL DEFAULT NOW()
 );
@@ -58,7 +58,7 @@ CREATE INDEX IF NOT EXISTS idx_credit_balance_chat_id ON credit_balance(chat_id)
 ALTER TABLE credit_balance ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Allow all for anon" ON credit_balance FOR ALL USING (true);
 
--- View: สรุปรายวัน
+-- View: daily summary
 CREATE OR REPLACE VIEW daily_summary AS
 SELECT
     chat_id,
@@ -71,12 +71,11 @@ GROUP BY chat_id, DATE(created_at AT TIME ZONE 'Asia/Bangkok')
 ORDER BY expense_date DESC;
 
 -- ============================================
--- Row Level Security (แนะนำให้เปิด)
+-- Row Level Security
 -- ============================================
 ALTER TABLE expenses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE payments ENABLE ROW LEVEL SECURITY;
 
--- Policy: อนุญาต service_role ทำได้ทุกอย่าง (bot ใช้ anon key ก็ได้สำหรับ dev)
--- สำหรับ production ควรสร้าง service_role key แยก
+-- Policy: allow all operations via anon key (suitable for dev; use service_role in production)
 CREATE POLICY "Allow all for anon" ON expenses FOR ALL USING (true);
 CREATE POLICY "Allow all for anon" ON payments FOR ALL USING (true);
