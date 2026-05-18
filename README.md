@@ -4,7 +4,7 @@
 
 [![Rust](https://img.shields.io/badge/rust-1.85%2B-orange)](https://www.rust-lang.org/)
 [![Edition](https://img.shields.io/badge/edition-2024-blue)](https://doc.rust-lang.org/edition-guide/rust-2024/)
-[![CI](https://github.com/your-org/kaobot/actions/workflows/ci.yml/badge.svg)](https://github.com/your-org/kaobot/actions/workflows/ci.yml)
+[![CI](https://github.com/suradet-ps/kaobot/actions/workflows/ci.yml/badge.svg)](https://github.com/suradet-ps/kaobot/actions/workflows/ci.yml)
 
 ## Features
 
