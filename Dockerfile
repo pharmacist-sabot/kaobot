@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y \
     wget \
     build-essential \
     perl \
+    linux-libc-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Add musl target
